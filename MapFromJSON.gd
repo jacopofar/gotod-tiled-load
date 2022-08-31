@@ -2,7 +2,7 @@ extends Node
 
 var map_url: String =  "http://localhost:8000/maps/first/chunk_0_0.json"
 var map_data: Dictionary
-var tilesets_textures: Dictionary = {}
+var tilesets: Dictionary = {}
 var atlas_textures: Dictionary = {}
 var animated_frames: Dictionary = {}
 
@@ -32,7 +32,7 @@ func _ready():
 		# offset to add to the ids of the tileset
 		# so each tileset has a range of ids
 		var firstgid = int(tileset["firstgid"])
-		tilesets_textures[firstgid] = {}
+		tilesets[firstgid] = {}
 		# download the JSON for the tileset
 		error = http_request_tilesets.request(tileset_url)
 		# will yield _result, _response_code, _headers, body
@@ -41,12 +41,12 @@ func _ready():
 			push_error("An error occurred in the HTTP request.")
 
 		var tileset_data =  parse_json(body.get_string_from_utf8())
-		tilesets_textures[firstgid]["tile_width"] = int(tileset_data["tilewidth"])
-		tilesets_textures[firstgid]["tile_height"] = int(tileset_data["tileheight"])
-		tilesets_textures[firstgid]["image_width"] = int(tileset_data["imagewidth"])
-		tilesets_textures[firstgid]["image_height"] = int(tileset_data["imageheight"])
-		tilesets_textures[firstgid]["animations"] = {}
-		tilesets_textures[firstgid]["calculated_size"] = (tilesets_textures[firstgid]["image_width"] * tilesets_textures[firstgid]["image_height"]) / (tilesets_textures[firstgid]["tile_width"] * tilesets_textures[firstgid]["tile_height"])
+		tilesets[firstgid]["tile_width"] = int(tileset_data["tilewidth"])
+		tilesets[firstgid]["tile_height"] = int(tileset_data["tileheight"])
+		tilesets[firstgid]["image_width"] = int(tileset_data["imagewidth"])
+		tilesets[firstgid]["image_height"] = int(tileset_data["imageheight"])
+		tilesets[firstgid]["animations"] = {}
+		tilesets[firstgid]["calculated_size"] = (tilesets[firstgid]["image_width"] * tilesets[firstgid]["image_height"]) / (tilesets[firstgid]["tile_width"] * tilesets[firstgid]["tile_height"])
 
 		# read the animation key if present, used later to recreate animated tiles
 		if "tiles" in tileset_data:
@@ -57,7 +57,7 @@ func _ready():
 					var gid_frames = []
 					for anim_frame_desc in tile_extra_metadata["animation"]:
 						gid_frames.append({"duration": int(anim_frame_desc["duration"]), "gid": int(anim_frame_desc["tileid"])})
-					tilesets_textures[firstgid]["animations"][int(tile_extra_metadata["id"])] = gid_frames
+					tilesets[firstgid]["animations"][int(tile_extra_metadata["id"])] = gid_frames
 
 		# now download the image for the tileset
 		var http_request_tileset_image = HTTPRequest.new()
@@ -73,7 +73,7 @@ func _ready():
 			push_error("An error occurred loading the image.")
 		var texture = ImageTexture.new()
 		texture.create_from_image(image)
-		tilesets_textures[firstgid]["texture"] = texture
+		tilesets[firstgid]["texture"] = texture
 	# finally instantiate everything in the scene
 	draw_map()
 
@@ -81,17 +81,17 @@ func _ready():
 func get_atlas_from_gid(gid: int) -> AtlasTexture:
 	if not gid in atlas_textures:
 		var thisatlas: AtlasTexture = AtlasTexture.new()
-		for candidate_gid in tilesets_textures.keys():
-			if (gid >= candidate_gid) and (gid <= candidate_gid + (tilesets_textures[candidate_gid]["calculated_size"])):
-				thisatlas.set_atlas(tilesets_textures[candidate_gid]["texture"])
-				var atlax_x = int(gid - candidate_gid) % (tilesets_textures[candidate_gid]["image_width"] / tilesets_textures[candidate_gid]["tile_width"])
-				var atlas_y = floor((gid - candidate_gid) / (tilesets_textures[candidate_gid]["image_width"] / tilesets_textures[candidate_gid]["tile_width"]))
+		for candidate_gid in tilesets.keys():
+			if (gid >= candidate_gid) and (gid <= candidate_gid + (tilesets[candidate_gid]["calculated_size"])):
+				thisatlas.set_atlas(tilesets[candidate_gid]["texture"])
+				var atlax_x = int(gid - candidate_gid) % (tilesets[candidate_gid]["image_width"] / tilesets[candidate_gid]["tile_width"])
+				var atlas_y = floor((gid - candidate_gid) / (tilesets[candidate_gid]["image_width"] / tilesets[candidate_gid]["tile_width"]))
 
 				thisatlas.set_region(Rect2(
-					atlax_x * tilesets_textures[candidate_gid]["tile_width"],
-					atlas_y * tilesets_textures[candidate_gid]["tile_height"],
-					tilesets_textures[candidate_gid]["tile_width"],
-					tilesets_textures[candidate_gid]["tile_height"]
+					atlax_x * tilesets[candidate_gid]["tile_width"],
+					atlas_y * tilesets[candidate_gid]["tile_height"],
+					tilesets[candidate_gid]["tile_width"],
+					tilesets[candidate_gid]["tile_height"]
 				))
 				atlas_textures[gid] = thisatlas
 				break
@@ -105,15 +105,15 @@ func get_animation_from_gid(gid:int) -> SpriteFrames:
 	if gid in animated_frames:
 		return animated_frames[gid]
 	else:
-		for candidate_gid in tilesets_textures.keys():
-			if (gid >= candidate_gid) and (gid <= candidate_gid + (tilesets_textures[candidate_gid]["calculated_size"])):
+		for candidate_gid in tilesets.keys():
+			if (gid >= candidate_gid) and (gid <= candidate_gid + (tilesets[candidate_gid]["calculated_size"])):
 				var relative_gid = gid - candidate_gid
-				if not relative_gid in tilesets_textures[candidate_gid]["animations"]:
+				if not relative_gid in tilesets[candidate_gid]["animations"]:
 					return null
 				var new_animation = SpriteFrames.new()
 				new_animation.add_animation("anim")
 
-				for single_frame in tilesets_textures[candidate_gid]["animations"][relative_gid]:
+				for single_frame in tilesets[candidate_gid]["animations"][relative_gid]:
 					# TODO here only the frame key is used, duration is ignored
 					new_animation.add_frame("anim", get_atlas_from_gid(candidate_gid + single_frame["gid"]))
 				animated_frames[gid] = new_animation
