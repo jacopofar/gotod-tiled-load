@@ -6,6 +6,55 @@ var tilesets: Dictionary = {}
 var atlas_textures: Dictionary = {}
 var animated_frames: Dictionary = {}
 
+# retrieves a tileset from an URL
+# notice this is asynchronous, call it with: yield(get_tileset(tileset_url), "completed")
+func get_tileset(tileset_url: String) -> Dictionary:
+	var base_url = tileset_url.left(tileset_url.find_last("/"))
+	var tileset = {}
+	var http_request_tilesets = HTTPRequest.new()
+	add_child(http_request_tilesets)
+	# download the JSON for the tileset
+	var error = http_request_tilesets.request(tileset_url)
+	# will yield _result, _response_code, _headers, body
+	var body = yield(http_request_tilesets, "request_completed")[3]
+	if error != OK:
+		push_error("An error occurred in the HTTP request.")
+
+	var tileset_data =  parse_json(body.get_string_from_utf8())
+	tileset["tile_width"] = int(tileset_data["tilewidth"])
+	tileset["tile_height"] = int(tileset_data["tileheight"])
+	tileset["image_width"] = int(tileset_data["imagewidth"])
+	tileset["image_height"] = int(tileset_data["imageheight"])
+	tileset["animations"] = {}
+	tileset["calculated_size"] = (tileset["image_width"] * tileset["image_height"]) / (tileset["tile_width"] * tileset["tile_height"])
+
+	# read the animation key if present, used later to recreate animated tiles
+	if "tiles" in tileset_data:
+		for tile_extra_metadata in tileset_data["tiles"]:
+			# this can be an animation or other properties
+			if "animation" in tile_extra_metadata:
+				# this is an array with frames having duration and gid. gid is relative to the tileset
+				var gid_frames = []
+				for anim_frame_desc in tile_extra_metadata["animation"]:
+					gid_frames.append({"duration": int(anim_frame_desc["duration"]), "gid": int(anim_frame_desc["tileid"])})
+				tileset["animations"][int(tile_extra_metadata["id"])] = gid_frames
+
+	# now download the image for the tileset
+	var http_request_tileset_image = HTTPRequest.new()
+	add_child(http_request_tileset_image)
+	error = http_request_tileset_image.request(base_url + "/" + tileset_data["image"])
+	body = yield(http_request_tileset_image, "request_completed")[3]
+	if error != OK:
+		push_error("An error occurred in the HTTP request.")
+
+	var image = Image.new()
+	error = image.load_png_from_buffer(body)
+	if error != OK:
+		push_error("An error occurred loading the image.")
+	var texture = ImageTexture.new()
+	texture.create_from_image(image)
+	tileset["texture"] = texture
+	return tileset
 
 func _ready():
 	var http_request_map = HTTPRequest.new()
@@ -27,53 +76,13 @@ func _ready():
 	# for each download the JSON and the image
 	for tileset in map_data["tilesets"]:
 		var tileset_url = map_url_base + "/" + tileset["source"]
-		var http_request_tilesets = HTTPRequest.new()
-		add_child(http_request_tilesets)
 		# offset to add to the ids of the tileset
 		# so each tileset has a range of ids
+		# the same tileset may have different firstgid on different maps
 		var firstgid = int(tileset["firstgid"])
-		tilesets[firstgid] = {}
-		# download the JSON for the tileset
-		error = http_request_tilesets.request(tileset_url)
-		# will yield _result, _response_code, _headers, body
-		body = yield(http_request_tilesets, "request_completed")[3]
-		if error != OK:
-			push_error("An error occurred in the HTTP request.")
 
-		var tileset_data =  parse_json(body.get_string_from_utf8())
-		tilesets[firstgid]["tile_width"] = int(tileset_data["tilewidth"])
-		tilesets[firstgid]["tile_height"] = int(tileset_data["tileheight"])
-		tilesets[firstgid]["image_width"] = int(tileset_data["imagewidth"])
-		tilesets[firstgid]["image_height"] = int(tileset_data["imageheight"])
-		tilesets[firstgid]["animations"] = {}
-		tilesets[firstgid]["calculated_size"] = (tilesets[firstgid]["image_width"] * tilesets[firstgid]["image_height"]) / (tilesets[firstgid]["tile_width"] * tilesets[firstgid]["tile_height"])
-
-		# read the animation key if present, used later to recreate animated tiles
-		if "tiles" in tileset_data:
-			for tile_extra_metadata in tileset_data["tiles"]:
-				# this can be an animation or other properties
-				if "animation" in tile_extra_metadata:
-					# this is an array with frames having duration and gid. gid is relative to the tileset
-					var gid_frames = []
-					for anim_frame_desc in tile_extra_metadata["animation"]:
-						gid_frames.append({"duration": int(anim_frame_desc["duration"]), "gid": int(anim_frame_desc["tileid"])})
-					tilesets[firstgid]["animations"][int(tile_extra_metadata["id"])] = gid_frames
-
-		# now download the image for the tileset
-		var http_request_tileset_image = HTTPRequest.new()
-		add_child(http_request_tileset_image)
-		error = http_request_tileset_image.request(map_url_base + "/" + tileset_data["image"])
-		body = yield(http_request_tileset_image, "request_completed")[3]
-		if error != OK:
-			push_error("An error occurred in the HTTP request.")
-
-		var image = Image.new()
-		error = image.load_png_from_buffer(body)
-		if error != OK:
-			push_error("An error occurred loading the image.")
-		var texture = ImageTexture.new()
-		texture.create_from_image(image)
-		tilesets[firstgid]["texture"] = texture
+		tilesets[firstgid] = yield(get_tileset(tileset_url), "completed")
+		print(tilesets)
 	# finally instantiate everything in the scene
 	draw_map()
 
