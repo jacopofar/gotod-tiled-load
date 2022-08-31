@@ -54,11 +54,10 @@ func _ready():
 				# this can be an animation or other properties
 				if "animation" in tile_extra_metadata:
 					# this is an array with frames having duration and gid. gid is relative to the tileset
-					# so adding the offset we get the absolute id
-					var absolute_gid_frames = []
+					var gid_frames = []
 					for anim_frame_desc in tile_extra_metadata["animation"]:
-						absolute_gid_frames.append({"duration": int(anim_frame_desc["duration"]), "gid": int(anim_frame_desc["tileid"]) + firstgid})
-					tilesets_textures[firstgid]["animations"][int(tile_extra_metadata["id"]) + firstgid] = absolute_gid_frames
+						gid_frames.append({"duration": int(anim_frame_desc["duration"]), "gid": int(anim_frame_desc["tileid"])})
+					tilesets_textures[firstgid]["animations"][int(tile_extra_metadata["id"])] = gid_frames
 
 		# now download the image for the tileset
 		var http_request_tileset_image = HTTPRequest.new()
@@ -108,14 +107,15 @@ func get_animation_from_gid(gid:int) -> SpriteFrames:
 	else:
 		for candidate_gid in tilesets_textures.keys():
 			if (gid >= candidate_gid) and (gid <= candidate_gid + (tilesets_textures[candidate_gid]["calculated_size"])):
-				if not gid in tilesets_textures[candidate_gid]["animations"]:
+				var relative_gid = gid - candidate_gid
+				if not relative_gid in tilesets_textures[candidate_gid]["animations"]:
 					return null
 				var new_animation = SpriteFrames.new()
 				new_animation.add_animation("anim")
 
-				for single_frame in tilesets_textures[candidate_gid]["animations"][gid]:
+				for single_frame in tilesets_textures[candidate_gid]["animations"][relative_gid]:
 					# TODO here only the frame key is used, duration is ignored
-					new_animation.add_frame("anim", get_atlas_from_gid(single_frame["gid"]))
+					new_animation.add_frame("anim", get_atlas_from_gid(candidate_gid + single_frame["gid"]))
 				animated_frames[gid] = new_animation
 				return new_animation
 		return null
