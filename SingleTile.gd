@@ -1,4 +1,4 @@
-extends Sprite
+extends Sprite2D
 
 
 # Declare member variables here. Examples:
@@ -17,7 +17,7 @@ func _ready():
 		var thisatlas: AtlasTexture = AtlasTexture.new()
 		thisatlas.set_atlas(texture)
 		thisatlas.set_region(Rect2((i % 6) * 32, (i % 8) * 32, 32, 32 ))
-		var ns = Sprite.new()
+		var ns = Sprite2D.new()
 		ns.set_position(Vector2(sin(i/20) * 200, cos(i/20) * 200))
 		ns.set_texture(thisatlas)
 		add_child(ns)

@@ -7,20 +7,22 @@ var atlas_textures: Dictionary = {}
 var animated_frames: Dictionary = {}
 
 # retrieves a tileset from an URL
-# notice this is asynchronous, call it with: yield(get_tileset(tileset_url), "completed")
+# notice this is asynchronous, call it with: await get_tileset(tileset_url).completed
 func get_tileset(tileset_url: String) -> Dictionary:
-	var base_url = tileset_url.left(tileset_url.find_last("/"))
+	var base_url = tileset_url.left(tileset_url.rfind("/"))
 	var tileset = {}
 	var http_request_tilesets = HTTPRequest.new()
 	add_child(http_request_tilesets)
 	# download the JSON for the tileset
 	var error = http_request_tilesets.request(tileset_url)
 	# will yield _result, _response_code, _headers, body
-	var body = yield(http_request_tilesets, "request_completed")[3]
+	var body = (await http_request_tilesets.request_completed)[3]
 	if error != OK:
 		push_error("An error occurred in the HTTP request.")
 
-	var tileset_data =  parse_json(body.get_string_from_utf8())
+	var test_json_conv = JSON.new()
+	test_json_conv.parse(body.get_string_from_utf8())
+	var tileset_data =  test_json_conv.get_data()
 	tileset["tile_width"] = int(tileset_data["tilewidth"])
 	tileset["tile_height"] = int(tileset_data["tileheight"])
 	tileset["image_width"] = int(tileset_data["imagewidth"])
@@ -43,7 +45,7 @@ func get_tileset(tileset_url: String) -> Dictionary:
 	var http_request_tileset_image = HTTPRequest.new()
 	add_child(http_request_tileset_image)
 	error = http_request_tileset_image.request(base_url + "/" + tileset_data["image"])
-	body = yield(http_request_tileset_image, "request_completed")[3]
+	body = (await http_request_tileset_image.request_completed)[3]
 	if error != OK:
 		push_error("An error occurred in the HTTP request.")
 
@@ -51,6 +53,7 @@ func get_tileset(tileset_url: String) -> Dictionary:
 	error = image.load_png_from_buffer(body)
 	if error != OK:
 		push_error("An error occurred loading the image.")
+	print("ERROR: ", error, " IMAGE: ", image, " BUFFER SIZE: ", body.size())
 	var texture = ImageTexture.new()
 	texture.create_from_image(image)
 	tileset["texture"] = texture
@@ -65,12 +68,14 @@ func _ready():
 	if error != OK:
 		push_error("An error occurred in the HTTP request.")
 	# will yield [_result, _response_code, _headers, body]
-	var body = yield(http_request_map, "request_completed")[3]
+	var body = (await http_request_map.request_completed)[3]
 
 
-	map_data =  parse_json(body.get_string_from_utf8())
+	var test_json_conv = JSON.new()
+	test_json_conv.parse(body.get_string_from_utf8())
+	map_data =  test_json_conv.get_data()
 
-	var map_url_base = map_url.left(map_url.find_last("/"))
+	var map_url_base = map_url.left(map_url.rfind("/"))
 
 	# now iterate over the tilesets referenced in the map
 	# for each download the JSON and the image
@@ -78,10 +83,10 @@ func _ready():
 		var tileset_url = map_url_base + "/" + tileset["source"]
 		# offset to add to the ids of the tileset
 		# so each tileset has a range of ids
-		# the same tileset may have different firstgid on different maps
+		# the same tileset may have different firstgid checked different maps
 		var firstgid = int(tileset["firstgid"])
 
-		tilesets[firstgid] = yield(get_tileset(tileset_url), "completed")
+		tilesets[firstgid] = await get_tileset(tileset_url)
 		print(tilesets)
 	# finally instantiate everything in the scene
 	draw_map()
@@ -151,7 +156,7 @@ func draw_map():
 
 			var anim = get_animation_from_gid(gid)
 			if anim != null:
-				var anims = AnimatedSprite.new()
+				var anims = AnimatedSprite2D.new()
 				anims.set_position(Vector2((pos_rel_x * height) + x, (pos_rel_y * width) + y))
 				anims.frames = anim
 				anims.play("anim")
@@ -160,7 +165,7 @@ func draw_map():
 			else:
 
 				var this_atlas = get_atlas_from_gid(gid)
-				var ns = Sprite.new()
+				var ns = Sprite2D.new()
 
 				ns.set_position(Vector2((pos_rel_x * height) + x, (pos_rel_y * width) + y))
 				ns.set_texture(this_atlas)
